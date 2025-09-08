@@ -1,0 +1,28 @@
+DATA_ROOT: "C:/Users/thisi/Desktop/ErfanMhp/University4032/CV/project/"
+RUNS_DIR: "./runs"
+OUTPUTS_DIR: "./outputs"
+
+IMG_SIZE: 512
+BATCH_SIZE: 1
+NUM_WORKERS: 0
+AUG_MULTIPLIER: 1
+
+MEAN: [0.485, 0.456, 0.406]
+STD: [0.229, 0.224, 0.225]
+
+EPOCHS: 5
+OPTIMIZER: "adamw"
+LR: 0.001
+WEIGHT_DECAY: 0.0001
+SCHEDULER: "plateau"
+EARLY_STOPPING_PATIENCE: 8
+GRAD_CLIP_NORM: 1.0
+AMP: false
+
+MODEL_NAME: "unet_mini"
+DROPOUT: 0.3
+ENCODER: "segformer_b0"
+PRETRAINED: 1
+
+LOSS: "bce_dice"
+THRESHOLD: 0.5

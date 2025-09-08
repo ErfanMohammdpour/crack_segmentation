@@ -1,0 +1,79 @@
+## Data splits (root)
+/test/
+/train/
+/valid/
+
+## Outputs and runs
+/outputs/
+/runs/
+logs/
+wandb/
+mlruns/
+tensorboard/
+tb_logs/
+
+## Virtual environments
+/.env
+/.venv/
+/venv/
+/ENV/
+/env/
+/crackseg-env/
+
+## Python cache and build
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.dylib
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+## IDE/editor
+/.idea/
+/.vscode/
+*.code-workspace
+
+## Large model/checkpoint files
+*.ckpt
+*.pt
+*.pth
+*.onnx
+*.h5
+
+## Numpy arrays
+*.npz
+*.npy
+
+## Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+## Images and datasets
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.tif
+*.tiff
+*.gif
+*.webp
+*.svg
+
+## Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+## OS files
+.DS_Store
+Thumbs.db
+
+## Non-core docs
+*.docx
