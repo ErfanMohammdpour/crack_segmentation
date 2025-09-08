@@ -15,7 +15,7 @@ import torch
 import numpy as np
 import cv2
 
-from crackseg.data.utils_io import resolve_paths_from_config, ensure_dir
+from crackseg.data.utils_io import resolve_paths_from_config, ensure_dir, get_device
 from crackseg.models.unet_mini import UNetMini
 from crackseg.models.unet_mini_dropout import UNetMiniDropout
 
@@ -93,9 +93,11 @@ def main() -> None:
         cfg["THRESHOLD"] = float(args.threshold)
 
     data_root, runs_dir, outputs_dir = resolve_paths_from_config(cfg)
+    device = get_device()
+    LOGGER.info("Using device: %s", device)
 
-    model = build_model(cfg["MODEL_NAME"], cfg)
-    ckpt = torch.load(args.weights, map_location="cpu")
+    model = build_model(cfg["MODEL_NAME"], cfg).to(device)
+    ckpt = torch.load(args.weights, map_location=device)
     state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
     model.load_state_dict(state)
     model.eval()
@@ -115,7 +117,7 @@ def main() -> None:
             continue
         h0, w0 = bgr.shape[:2]
         img = preprocess_image(bgr, img_size, mean, std)
-        x = torch.from_numpy(img.transpose(2, 0, 1)).unsqueeze(0).float()
+        x = torch.from_numpy(img.transpose(2, 0, 1)).unsqueeze(0).float().to(device)
         with torch.no_grad():
             logits = model(x)
             probs = torch.sigmoid(logits)[0, 0].cpu().numpy()
@@ -133,4 +135,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -68,7 +68,7 @@ def make_loader(root: Path, split: str, cfg: Dict, augment: bool) -> DataLoader:
         batch_size=int(cfg["BATCH_SIZE"]),
         shuffle=augment,
         num_workers=int(cfg["NUM_WORKERS"]),
-        pin_memory=False,
+        pin_memory=torch.cuda.is_available(),
     )
     return loader
 

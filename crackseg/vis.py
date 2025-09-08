@@ -62,10 +62,11 @@ def save_triptychs(model: torch.nn.Module, cfg: dict, run_dir: Path, split: str 
     out_dir = run_dir / "visuals"
     out_dir.mkdir(parents=True, exist_ok=True)
     model.eval()
+    device = next(model.parameters()).device
     with torch.no_grad():
         for i in idxs:
             img_t, mask_t = ds[i]
-            logits = model(img_t.unsqueeze(0))
+            logits = model(img_t.unsqueeze(0).to(device))
             prob = torch.sigmoid(logits)[0, 0].cpu().numpy()
             pred = (prob >= float(cfg.get("THRESHOLD", 0.5))).astype(np.uint8)
 
@@ -88,4 +89,3 @@ def save_triptychs(model: torch.nn.Module, cfg: dict, run_dir: Path, split: str 
             plt.tight_layout()
             plt.savefig(out_dir / f"sample_{i}.png")
             plt.close()
-

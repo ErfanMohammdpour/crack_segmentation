@@ -13,6 +13,7 @@ import json
 import logging
 import random
 from typing import Dict, Optional, Tuple
+import os
 
 import numpy as np
 import torch
@@ -68,7 +69,25 @@ def set_seed(seed: int = 42) -> None:
 
 
 def get_device() -> torch.device:
-    """CPU-only device helper (explicitly chooses CPU)."""
+    """Select compute device with sensible defaults.
+
+    Priority:
+    1) Environment variable `DEVICE` if set (e.g., "cuda", "cuda:0", "cpu", "mps").
+    2) CUDA if available
+    3) Apple MPS if available (PyTorch 1.12+ on macOS)
+    4) CPU
+    """
+    env = os.getenv("DEVICE")
+    if env:
+        try:
+            return torch.device(env)
+        except Exception as e:
+            LOGGER.warning("Invalid DEVICE env '%s': %s. Falling back to auto.", env, e)
+
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():  # type: ignore[attr-defined]
+        return torch.device("mps")
     return torch.device("cpu")
 
 
@@ -78,4 +97,3 @@ def resolve_paths_from_config(cfg: Dict) -> Tuple[Path, Path, Path]:
     runs_dir = Path(cfg["RUNS_DIR"]).expanduser()
     outputs_dir = Path(cfg["OUTPUTS_DIR"]).expanduser()
     return data_root, runs_dir, outputs_dir
-
