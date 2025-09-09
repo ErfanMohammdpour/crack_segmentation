@@ -1,52 +1,107 @@
 from __future__ import annotations
 
-"""Optional SegFormer-Lite style model using timm backbones.
+"""SegFormer-Lite: lightweight transfer model with timm encoder.
 
-This file is only used if `timm` is installed and the user selects it.
-To keep CPU-only users lightweight, the default config uses UNet variants.
+Notes
+- Uses timm backbones with `features_only=True` to obtain multi-scale features.
+- Supports encoder aliases: "segformer_b0" -> "mit_b0", "mobilenet_v3_small" -> "mobilenetv3_small_100".
+- Simple top-down decoder: 1x1 reduce -> upsample -> conv3x3 fuse, final 1-channel logits.
+- If pretrained weights cannot be downloaded (offline), falls back to random init with a warning.
 """
 
-from typing import List
+from typing import List, Dict
 import torch
 import torch.nn as nn
+import logging
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _resolve_encoder_name(name: str) -> str:
+    n = name.lower()
+    aliases: Dict[str, str] = {
+        "segformer_b0": "mit_b0",
+        "mobilenet_v3_small": "mobilenetv3_small_100",
+        "mobilenetv3_small": "mobilenetv3_small_100",
+    }
+    return aliases.get(n, name)
+
+
+class Conv1x1(nn.Module):
+    def __init__(self, in_ch: int, out_ch: int):
+        super().__init__()
+        self.conv = nn.Conv2d(in_ch, out_ch, kernel_size=1, bias=False)
+        self.bn = nn.BatchNorm2d(out_ch)
+        self.act = nn.ReLU(inplace=True)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.act(self.bn(self.conv(x)))
+
+
+class Conv3x3(nn.Module):
+    def __init__(self, in_ch: int, out_ch: int):
+        super().__init__()
+        self.conv = nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1, bias=False)
+        self.bn = nn.BatchNorm2d(out_ch)
+        self.act = nn.ReLU(inplace=True)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.act(self.bn(self.conv(x)))
 
 
 class SegFormerLite(nn.Module):
-    def __init__(self, encoder_name: str = "mobilenetv3_large_100", pretrained: bool = False):
+    def __init__(
+        self,
+        encoder_name: str = "segformer_b0",
+        pretrained: bool = True,
+        in_ch: int = 3,
+        num_classes: int = 1,
+        base: int = 32,
+    ):
         super().__init__()
         try:
             import timm  # type: ignore
         except Exception as e:
             raise ImportError(
-                "timm is required for segformer_lite. Install with `pip install timm` or switch to unet_mini."
+                "timm is required for segformer_lite. Install with `pip install timm`."
             ) from e
 
-        self.encoder = timm.create_model(encoder_name, features_only=True, pretrained=pretrained, in_chans=3)
-        feat_chs: List[int] = self.encoder.feature_info.channels()
-        self.proj = nn.ModuleList([nn.Conv2d(c, 64, kernel_size=1) for c in feat_chs])
-        self.fuse = nn.Sequential(
-            nn.Conv2d(64 * len(feat_chs), 128, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(128, 64, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-        )
-        self.head = nn.Conv2d(64, 1, kernel_size=1)
+        enc_name = _resolve_encoder_name(encoder_name)
+        try:
+            self.encoder = timm.create_model(
+                enc_name, features_only=True, pretrained=bool(pretrained), in_chans=in_ch
+            )
+        except Exception as e:
+            LOGGER.warning(
+                "Failed to load pretrained weights for '%s' (%s). Falling back to random init.",
+                enc_name,
+                e,
+            )
+            self.encoder = timm.create_model(enc_name, features_only=True, pretrained=False, in_chans=in_ch)
+
+        feat_chs: List[int] = list(self.encoder.feature_info.channels())  # type: ignore[attr-defined]
+        # Reduce channels for each feature map to a common width
+        self.lateral = nn.ModuleList([Conv1x1(c, base) for c in feat_chs])
+        # Top-down smoothing after fusion at each stage (except the last)
+        self.smooth = nn.ModuleList([Conv3x3(base, base) for _ in range(len(feat_chs) - 1)])
+        # Final head
+        self.head = nn.Conv2d(base, num_classes, kernel_size=1)
+
+        n_params = sum(p.numel() for p in self.parameters())
+        print(f"SegFormerLite initialized: encoder={enc_name}, params={n_params/1e6:.2f}M")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        feats = self.encoder(x)
-        # Upsample all to the highest resolution
-        h, w = feats[0].shape[-2:]
-        ups = []
-        for f, p in zip(feats, self.proj):
-            f = p(f)
-            if f.shape[-2:] != (h, w):
-                f = torch.nn.functional.interpolate(f, size=(h, w), mode="bilinear", align_corners=False)
-            ups.append(f)
-        x = torch.cat(ups, dim=1)
-        x = self.fuse(x)
-        x = self.head(x)
-        # Final logits at highest resolution, caller may upsample to input size
-        return x
-
+        feats: List[torch.Tensor] = self.encoder(x)
+        # Build top-down path starting from the deepest feature
+        feats_lat = [lat(f) for f, lat in zip(feats, self.lateral)]
+        y = feats_lat[-1]
+        for i in range(len(feats_lat) - 2, -1, -1):
+            y = torch.nn.functional.interpolate(y, size=feats_lat[i].shape[-2:], mode="bilinear", align_corners=False)
+            y = y + feats_lat[i]
+            y = self.smooth[i](y) if i < len(self.smooth) else y
+        logits = self.head(y)
+        # Upsample logits to input spatial size to match target masks
+        if logits.shape[-2:] != x.shape[-2:]:
+            logits = torch.nn.functional.interpolate(logits, size=x.shape[-2:], mode="bilinear", align_corners=False)
+        return logits

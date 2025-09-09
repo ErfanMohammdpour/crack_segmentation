@@ -34,6 +34,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--model", type=str, default=None)
     p.add_argument("--dropout", type=float, default=None)
     p.add_argument("--threshold", type=float, default=None)
+    p.add_argument("--encoder", type=str, default=None, help="Backbone for segformer_lite")
+    p.add_argument("--pretrained", type=int, default=None, help="Use pretrained encoder: 0/1")
     return p.parse_args()
 
 
@@ -51,8 +53,9 @@ def build_model(name: str, cfg: Dict) -> torch.nn.Module:
         return UNetMiniDropout(dropout=p)
     if name == "segformer_lite":
         from crackseg.models.segformer_lite import SegFormerLite
-
-        return SegFormerLite(encoder_name=str(cfg.get("ENCODER", "mobilenetv3_large_100")), pretrained=False)
+        enc = str(cfg.get("ENCODER", "segformer_b0"))
+        pretrained = bool(int(cfg.get("PRETRAINED", 1)))
+        return SegFormerLite(encoder_name=enc, pretrained=pretrained)
     if name == "scratch_ed":
         base_ch = int(cfg.get("BASE_CHANNELS", 32))
         return ScratchED(base_ch=base_ch)
@@ -101,6 +104,10 @@ def main() -> None:
         cfg["DROPOUT"] = float(args.dropout)
     if args.threshold is not None:
         cfg["THRESHOLD"] = float(args.threshold)
+    if args.encoder is not None:
+        cfg["ENCODER"] = args.encoder
+    if args.pretrained is not None:
+        cfg["PRETRAINED"] = int(args.pretrained)
 
     data_root, runs_dir, outputs_dir = resolve_paths_from_config(cfg)
     device = get_device()

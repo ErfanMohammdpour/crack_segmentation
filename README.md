@@ -124,5 +124,22 @@ Sample Data (for Smoke Tests)
 
 Next Steps
 - Run both Baseline and Dropout, compare metrics and curves, and add a short analysis to crackseg/README.md.
-- If you enable SegFormer‑Lite, include it in a 3‑way comparison.
+- If you enable SegFormer-Lite, include it in a 3-way comparison.
 
+Transfer Learning (SegFormer‑Lite)
+- Install backbone zoo:
+  pip install timm
+
+- Train with transfer (freeze→unfreeze + dual LR):
+  python train.py --config crackseg/config.yaml \
+    --model segformer_lite --encoder segformer_b0 --pretrained 1 \
+    --freeze-epochs 5 --lr-head 1e-3 --lr-encoder 1e-4
+
+- Evaluate on test:
+  python evaluate.py --config crackseg/config.yaml \
+    --weights runs/segformer_lite/best.pth --model segformer_lite
+
+- Inference on a folder:
+  python infer.py --config crackseg/config.yaml \
+    --weights runs/segformer_lite/best.pth --model segformer_lite \
+    --input "<DATA_ROOT>/test" --save ./outputs/infer_segformer
