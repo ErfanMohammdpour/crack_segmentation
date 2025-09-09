@@ -1,131 +1,137 @@
-You are improving an existing crack segmentation repo that already has:
+Add a transfer-learning model to this crack segmentation repo. The project already has COCO loaders, BCE+Dice loss, AMP, logging, and evaluate/infer. Implement a lightweight segformer_lite model that uses a pretrained encoder from timm, plus a simple decoder/head for binary segmentation. Keep the existing CLI/config style.
 
-COCO loaders (train/valid/test), BCE+Dice loss, amp, logging/plots, evaluate/infer scripts.
+0) Pre-req
 
-A U-Net Mini baseline (for comparison only).
-Important constraints from the assignment: The core model must be from scratch, not a U-Net or U-Net variant, no pretrained, no dropout (dropout comes later in a separate experiment).
+Add dependency: timm (don’t break if it’s missing—error with a clear message).
 
-Goal: Implement a strong custom encoder–decoder model that does not use U-Net skip concatenations yet can match or beat the U-Net Mini baseline on our dataset. Keep everything config-driven and compatible with the existing training/eval/infer scripts.
+Dataset: COCO per split at <DATA_ROOT>/{train,valid,test}/_annotations.coco.json. Positive class is any category containing “crack” (case-insensitive). Masks are binary; resize masks with INTER_NEAREST.
 
-1) Read project context
+1) New model file
 
-Use the repo’s existing structure and crackseg/config.yaml.
+Create crackseg/models/segformer_lite.py with:
 
-Dataset: COCO per split under <DATA_ROOT>/{train,valid,test}/_annotations.coco.json. Positive class: any category name containing “crack” (case-insensitive). Masks are binary; resize masks with INTER_NEAREST.
+Backbone (encoder): Create via timm.create_model(...) with features_only=True or a compatible API to obtain multi-scale feature maps. Support at least:
 
-2) Add models (from scratch)
+ENCODER values: "segformer_b0", "mobilenet_v3_small".
 
-Create two new models under crackseg/models/:
+Internally map common aliases if needed (e.g., map "segformer_b0" → "mit_b0" in timm if required).
 
-(A) scratch_ed.py – core baseline (no skip connections)
+Pretrained: If PRETRAINED: 1 or --pretrained 1, load pretrained weights from timm. If offline, catch the error and proceed with random init (log a warning).
 
-Encoder: 3–4 stages; each stage: Conv(3×3)→BN→ReLU, second Conv(3×3)→BN→ReLU; downsample via stride=2 in the first conv of the stage (no MaxPool required).
+Decoder/Head: A small FPN-ish or simple upsample-and-fuse decoder that upsamples the deepest feature back to the input stride, progressively fusing higher-resolution features (1×1 reduce → upsample → conv3×3). Final 1-channel logits head (sigmoid used only in eval/infer).
 
-Bottleneck: 1–2 Conv(3×3) blocks.
+No U-Net concatenation requirement across encoder→decoder is fine (this is a transfer model, not the core “from-scratch” model).
 
-Decoder: bilinear Upsample(×2) → Conv(3×3)→BN→ReLU (twice) per stage.
+Constructor signature:
 
-No cross-scale skip connections, no pretrained, no dropout.
+class SegFormerLite(nn.Module):
+    def __init__(self, encoder_name: str = "segformer_b0",
+                 pretrained: bool = True,
+                 in_ch: int = 3, num_classes: int = 1,
+                 base: int = 32):
+        ...
 
-Head: Conv(1×1) → 1 logit channel (apply sigmoid in eval/infer).
 
-Keep parameter count modest (~1–3M).
+Print parameter count on init.
 
-(B) scratch_ed_plus.py – stronger but still non-U-Net
+2) Model factory wiring
 
-Same encoder/decoder skeleton as (A), still no encoder–decoder skip concatenations.
+Where the repo selects models, register:
 
-Add ASPP at the bottleneck (rates e.g. 1/6/12/18) + 1×1 fusion.
+"segformer_lite" -> SegFormerLite
 
-Use residual blocks inside stages (residual within a scale is fine; just no skip across encoder→decoder).
 
-Add lightweight channel attention (SE) after stage outputs.
+Use config/CLI to pass ENCODER, PRETRAINED, and BASE_CHANNELS (mapped to base if useful).
 
-Head same as above. No pretrained, no dropout.
+3) Freeze → Unfreeze (warm-up) + dual LR
 
-Target: performance comparable to or better than U-Net Mini.
+Add CLI flags (and config fallbacks):
 
-3) Wire-up / factory / CLI
+--freeze-epochs (int, default 0) → during these epochs, freeze encoder (requires_grad=False).
 
-In the model factory (wherever models are selected), register:
+--lr-head (float) and --lr-encoder (float). If not provided:
 
-"scratch_ed" → ScratchED
+default lr_head = cfg["LR"]
 
-"scratch_ed_plus" → ScratchEDPlus
+default lr_encoder = cfg["LR"] * 0.1
 
-Ensure train.py / evaluate.py / infer.py accept --model scratch_ed / --model scratch_ed_plus and instantiate correctly.
+Build param groups:
 
-4) Config options (crackseg/config.yaml)
+enc_params = [p for n,p in model.named_parameters() if is_encoder(n)]
+head_params = [p for n,p in model.named_parameters() if not is_encoder(n)]
+optimizer = AdamW([
+    {"params": head_params, "lr": lr_head},
+    {"params": enc_params,  "lr": lr_encoder},
+], weight_decay=cfg["WEIGHT_DECAY"])
 
-Add fields with safe defaults:
 
-MODEL_NAME: "scratch_ed"          # or "scratch_ed_plus"
-BASE_CHANNELS: 32                 # channels multiplier (16/32/48)
-ASPP_RATES: [1, 6, 12, 18]        # used only by scratch_ed_plus
-THRESHOLD: 0.40                   # tuned on valid
-AMP: true                         # on GPU
-BATCH_SIZE: 8                     # adjust by VRAM
-EPOCHS: 80                        # with early stopping
-LR: 1e-3
-WEIGHT_DECAY: 1e-4
-SCHEDULER: "ReduceLROnPlateau"
-EARLY_STOPPING_PATIENCE: 10
-ACCUM_STEPS: 1                    # >1 to simulate larger batch if needed
+Implement is_encoder(n) robustly (e.g., check module prefixes).
 
-5) Training / evaluation / inference (use existing scripts)
+Training loop:
 
-Keep BCE+Dice as the default loss. Provide optional LOSS: "focal_tversky" in config (implement if it doesn’t exist yet).
+For epoch < freeze_epochs: keep encoder frozen (and optionally set encoder BN to eval).
 
-Mixed precision (AMP) on GPU; deterministic seeds; save best.pth by validation IoU.
+At epoch == freeze_epochs: unfreeze encoder (requires_grad=True) and optionally reset the optimizer (or keep, up to you). Log the transition.
 
-evaluate.py: compute IoU, Dice, Precision, Recall on test, read THRESHOLD from config, write outputs/metrics_test.json, and save a few qualitative overlays.
+4) AMP + scheduler + early stopping
 
-infer.py: read the same threshold and save _mask.png + _overlay.png; restore original size for saving.
+Reuse the project’s AMP (cfg["AMP"]), scheduler "plateau", early stopping, grad-clip, logs, and plots exactly like other models.
 
-6) Quality checks
+Save runs/segformer_lite/best.pth by validation IoU.
 
-Provide a smoke test script or snippet that:
+5) Evaluate & infer
 
-Builds a tiny batch (IMG_SIZE=256) and verifies forward pass shapes.
+evaluate.py: constructing the model must accept --model segformer_lite --encoder <name> --pretrained <0/1>. Load weights and compute IoU, Dice, Precision, Recall on test, using THRESHOLD from config. Save outputs/metrics_test.json.
 
-Trains for 1–2 mini-epochs to ensure loss decreases.
+infer.py: same threshold; save _mask.png and _overlay.png, resizing mask back with INTER_NEAREST.
 
-Plot loss & IoU curves (runs/<model>/plots/) using existing viz utilities.
+6) Config keys (with defaults)
 
-Keep parameter count printed at init time for both models.
+Update crackseg/config.yaml handling (do not hard-fail if missing; provide defaults):
 
-7) Strict “no U-Net” compliance
+MODEL_NAME: "segformer_lite"
+ENCODER: "segformer_b0"   # or "mobilenet_v3_small"
+PRETRAINED: 1
+FREEZE_EPOCHS: 5
+LR: 0.001
+LR_ENCODER: 0.0001        # fallback if --lr-encoder not set
+LR_HEAD: 0.001            # fallback if --lr-head not set
+IMG_SIZE: 512
+BATCH_SIZE: 8
+AMP: true
+THRESHOLD: 0.40
 
-Do not use encoder–decoder skip concatenations (cat(skip, up)), and do not import external segmentation libraries (e.g., segmentation_models_pytorch). Pure PyTorch only.
+7) README block (How to run)
 
-Residual connections inside a stage and ASPP at the bottleneck are allowed.
+Append to README:
 
-8) Commands to include in README
+# Install backbone zoo
+pip install timm
 
-Add a “How to run” block:
+# Train with transfer (freeze→unfreeze + dual LR)
+python train.py --config crackseg/config.yaml \
+  --model segformer_lite --encoder segformer_b0 --pretrained 1 \
+  --freeze-epochs 5 --lr-head 1e-3 --lr-encoder 1e-4
 
-# Baseline custom model (from-scratch)
-python train.py    --config crackseg/config.yaml --model scratch_ed
-python evaluate.py --config crackseg/config.yaml --weights runs/scratch_ed/best.pth
-python infer.py    --config crackseg/config.yaml --weights runs/scratch_ed/best.pth \
-  --input "<DATA_ROOT>/test" --save ./outputs/infer_scratch
+# Evaluate on test
+python evaluate.py --config crackseg/config.yaml \
+  --weights runs/segformer_lite/best.pth --model segformer_lite
 
-# Stronger custom model w/ ASPP (still non-U-Net)
-python train.py    --config crackseg/config.yaml --model scratch_ed_plus
-python evaluate.py --config crackseg/config.yaml --weights runs/scratch_ed_plus/best.pth
+# Inference on a folder
+python infer.py --config crackseg/config.yaml \
+  --weights runs/segformer_lite/best.pth --model segformer_lite \
+  --input "<DATA_ROOT>/test" --save ./outputs/infer_segformer
 
-9) (Later, separate task – not part of the core model)
+8) Acceptance checks
 
-Add scratch_ed_plus_dropout.py (insert nn.Dropout2d(p=0.3) in deeper blocks) and compare against the no-dropout version for the Regularization section.
+Trains end-to-end with AMP on GPU and CPU fallback.
 
-Acceptance criteria
+Logs/plots saved like other models; best checkpoint saved by val IoU.
 
-scratch_ed trains end-to-end and produces reasonable IoU/Dice on test.
+Freeze→unfreeze actually toggles requires_grad on encoder params and is logged.
 
-scratch_ed_plus improves metrics (ideally ≥ U-Net Mini baseline on the same config).
+Dual-LR param groups are applied (inspect optimizer param groups).
 
-No U-Net-style encoder→decoder skip concatenations anywhere.
+Evaluate/infer produce metrics/overlays with the shared THRESHOLD.
 
-All code paths run with both CPU (slow) and GPU; AMP enabled on GPU; configs drive sizes/hyperparams.
-
-Evaluate and infer respect the same THRESHOLD and save metrics/overlays.
+Please implement with minimal changes outside the new model + factory/CLI plumbing, and match the repo’s code style.

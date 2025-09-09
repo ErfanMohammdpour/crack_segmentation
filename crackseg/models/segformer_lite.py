@@ -9,7 +9,7 @@ Notes
 - If pretrained weights cannot be downloaded (offline), falls back to random init with a warning.
 """
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 import torch
 import torch.nn as nn
 import logging
@@ -26,6 +26,22 @@ def _resolve_encoder_name(name: str) -> str:
         "mobilenetv3_small": "mobilenetv3_small_100",
     }
     return aliases.get(n, name)
+
+
+def _try_create_features_model(
+    timm_mod,
+    name: str,
+    in_chans: int,
+    pretrained: bool,
+) -> Optional[nn.Module]:
+    try:
+        return timm_mod.create_model(name, features_only=True, pretrained=bool(pretrained), in_chans=in_chans)
+    except Exception:
+        try:
+            # Retry without pretrained in case of download/offline issues or missing weights
+            return timm_mod.create_model(name, features_only=True, pretrained=False, in_chans=in_chans)
+        except Exception:
+            return None
 
 
 class Conv1x1(nn.Module):
@@ -67,18 +83,57 @@ class SegFormerLite(nn.Module):
                 "timm is required for segformer_lite. Install with `pip install timm`."
             ) from e
 
-        enc_name = _resolve_encoder_name(encoder_name)
-        try:
-            self.encoder = timm.create_model(
-                enc_name, features_only=True, pretrained=bool(pretrained), in_chans=in_ch
-            )
-        except Exception as e:
-            LOGGER.warning(
-                "Failed to load pretrained weights for '%s' (%s). Falling back to random init.",
-                enc_name,
-                e,
-            )
-            self.encoder = timm.create_model(enc_name, features_only=True, pretrained=False, in_chans=in_ch)
+        # Build a list of candidate encoder names to try in order
+        enc_name_req = _resolve_encoder_name(encoder_name)
+        candidates: List[str] = [enc_name_req]
+        # Also try the raw provided name, in case aliasing wasn't needed
+        if encoder_name not in candidates:
+            candidates.append(encoder_name)
+        # If requesting a segformer variant but not available, try MobileNetV3 small/large as fallback
+        if any(k in enc_name_req.lower() for k in ["mit_b", "segformer", "mix_transformer", "mit_"]):
+            for alt in ("mobilenetv3_small_100", "mobilenetv3_large_100"):
+                if alt not in candidates:
+                    candidates.append(alt)
+
+        # If user requested mobilenet aliases, ensure canonical name is in list
+        if "mobilenet_v3_small" in encoder_name.lower() and "mobilenetv3_small_100" not in candidates:
+            candidates.insert(0, "mobilenetv3_small_100")
+
+        # Also try segformer_b0 literal in case this timm build uses that name
+        if "segformer_b0" not in candidates:
+            candidates.append("segformer_b0")
+
+        chosen = None
+        for cand in candidates:
+            enc = _try_create_features_model(timm, cand, in_chans=in_ch, pretrained=bool(pretrained))
+            if enc is not None:
+                chosen = (cand, enc)
+                break
+        if chosen is None:
+            # Last resort: enumerate timm models and pick a generic lightweight encoder
+            try:
+                avail = timm.list_models(pretrained=False)
+            except Exception:
+                avail = []
+            fallback = None
+            for cand in ("mobilenetv3_small_100", "mobilenetv3_large_100", "efficientnet_b0", "resnet18"):
+                if cand in avail:
+                    fallback = cand
+                    break
+            if fallback is None and avail:
+                fallback = avail[0]
+            if fallback is None:
+                raise RuntimeError("No compatible timm encoder found. Please install a newer timm or choose a different model.")
+            LOGGER.warning("Falling back to encoder '%s' due to unavailable requested encoders: %s", fallback, candidates)
+            enc = _try_create_features_model(timm, fallback, in_chans=in_ch, pretrained=False)
+            if enc is None:
+                raise RuntimeError(f"Failed to initialize fallback encoder '{fallback}'.")
+            chosen = (fallback, enc)
+
+        enc_name, enc_mod = chosen
+        if enc_name != enc_name_req:
+            LOGGER.warning("Using encoder '%s' instead of requested '%s'", enc_name, enc_name_req)
+        self.encoder = enc_mod
 
         feat_chs: List[int] = list(self.encoder.feature_info.channels())  # type: ignore[attr-defined]
         # Reduce channels for each feature map to a common width
