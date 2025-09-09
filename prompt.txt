@@ -1,0 +1,131 @@
+You are improving an existing crack segmentation repo that already has:
+
+COCO loaders (train/valid/test), BCE+Dice loss, amp, logging/plots, evaluate/infer scripts.
+
+A U-Net Mini baseline (for comparison only).
+Important constraints from the assignment: The core model must be from scratch, not a U-Net or U-Net variant, no pretrained, no dropout (dropout comes later in a separate experiment).
+
+Goal: Implement a strong custom encoder–decoder model that does not use U-Net skip concatenations yet can match or beat the U-Net Mini baseline on our dataset. Keep everything config-driven and compatible with the existing training/eval/infer scripts.
+
+1) Read project context
+
+Use the repo’s existing structure and crackseg/config.yaml.
+
+Dataset: COCO per split under <DATA_ROOT>/{train,valid,test}/_annotations.coco.json. Positive class: any category name containing “crack” (case-insensitive). Masks are binary; resize masks with INTER_NEAREST.
+
+2) Add models (from scratch)
+
+Create two new models under crackseg/models/:
+
+(A) scratch_ed.py – core baseline (no skip connections)
+
+Encoder: 3–4 stages; each stage: Conv(3×3)→BN→ReLU, second Conv(3×3)→BN→ReLU; downsample via stride=2 in the first conv of the stage (no MaxPool required).
+
+Bottleneck: 1–2 Conv(3×3) blocks.
+
+Decoder: bilinear Upsample(×2) → Conv(3×3)→BN→ReLU (twice) per stage.
+
+No cross-scale skip connections, no pretrained, no dropout.
+
+Head: Conv(1×1) → 1 logit channel (apply sigmoid in eval/infer).
+
+Keep parameter count modest (~1–3M).
+
+(B) scratch_ed_plus.py – stronger but still non-U-Net
+
+Same encoder/decoder skeleton as (A), still no encoder–decoder skip concatenations.
+
+Add ASPP at the bottleneck (rates e.g. 1/6/12/18) + 1×1 fusion.
+
+Use residual blocks inside stages (residual within a scale is fine; just no skip across encoder→decoder).
+
+Add lightweight channel attention (SE) after stage outputs.
+
+Head same as above. No pretrained, no dropout.
+
+Target: performance comparable to or better than U-Net Mini.
+
+3) Wire-up / factory / CLI
+
+In the model factory (wherever models are selected), register:
+
+"scratch_ed" → ScratchED
+
+"scratch_ed_plus" → ScratchEDPlus
+
+Ensure train.py / evaluate.py / infer.py accept --model scratch_ed / --model scratch_ed_plus and instantiate correctly.
+
+4) Config options (crackseg/config.yaml)
+
+Add fields with safe defaults:
+
+MODEL_NAME: "scratch_ed"          # or "scratch_ed_plus"
+BASE_CHANNELS: 32                 # channels multiplier (16/32/48)
+ASPP_RATES: [1, 6, 12, 18]        # used only by scratch_ed_plus
+THRESHOLD: 0.40                   # tuned on valid
+AMP: true                         # on GPU
+BATCH_SIZE: 8                     # adjust by VRAM
+EPOCHS: 80                        # with early stopping
+LR: 1e-3
+WEIGHT_DECAY: 1e-4
+SCHEDULER: "ReduceLROnPlateau"
+EARLY_STOPPING_PATIENCE: 10
+ACCUM_STEPS: 1                    # >1 to simulate larger batch if needed
+
+5) Training / evaluation / inference (use existing scripts)
+
+Keep BCE+Dice as the default loss. Provide optional LOSS: "focal_tversky" in config (implement if it doesn’t exist yet).
+
+Mixed precision (AMP) on GPU; deterministic seeds; save best.pth by validation IoU.
+
+evaluate.py: compute IoU, Dice, Precision, Recall on test, read THRESHOLD from config, write outputs/metrics_test.json, and save a few qualitative overlays.
+
+infer.py: read the same threshold and save _mask.png + _overlay.png; restore original size for saving.
+
+6) Quality checks
+
+Provide a smoke test script or snippet that:
+
+Builds a tiny batch (IMG_SIZE=256) and verifies forward pass shapes.
+
+Trains for 1–2 mini-epochs to ensure loss decreases.
+
+Plot loss & IoU curves (runs/<model>/plots/) using existing viz utilities.
+
+Keep parameter count printed at init time for both models.
+
+7) Strict “no U-Net” compliance
+
+Do not use encoder–decoder skip concatenations (cat(skip, up)), and do not import external segmentation libraries (e.g., segmentation_models_pytorch). Pure PyTorch only.
+
+Residual connections inside a stage and ASPP at the bottleneck are allowed.
+
+8) Commands to include in README
+
+Add a “How to run” block:
+
+# Baseline custom model (from-scratch)
+python train.py    --config crackseg/config.yaml --model scratch_ed
+python evaluate.py --config crackseg/config.yaml --weights runs/scratch_ed/best.pth
+python infer.py    --config crackseg/config.yaml --weights runs/scratch_ed/best.pth \
+  --input "<DATA_ROOT>/test" --save ./outputs/infer_scratch
+
+# Stronger custom model w/ ASPP (still non-U-Net)
+python train.py    --config crackseg/config.yaml --model scratch_ed_plus
+python evaluate.py --config crackseg/config.yaml --weights runs/scratch_ed_plus/best.pth
+
+9) (Later, separate task – not part of the core model)
+
+Add scratch_ed_plus_dropout.py (insert nn.Dropout2d(p=0.3) in deeper blocks) and compare against the no-dropout version for the Regularization section.
+
+Acceptance criteria
+
+scratch_ed trains end-to-end and produces reasonable IoU/Dice on test.
+
+scratch_ed_plus improves metrics (ideally ≥ U-Net Mini baseline on the same config).
+
+No U-Net-style encoder→decoder skip concatenations anywhere.
+
+All code paths run with both CPU (slow) and GPU; AMP enabled on GPU; configs drive sizes/hyperparams.
+
+Evaluate and infer respect the same THRESHOLD and save metrics/overlays.

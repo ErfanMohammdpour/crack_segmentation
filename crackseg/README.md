@@ -61,3 +61,12 @@ Notes
 - Augmentation uses only OpenCV (rotation, scaling, brightness/contrast, Gaussian noise).
 - Masks are resized with INTER_NEAREST and kept as {0,1}.
 - Mixed precision (AMP) enabled; deterministic seeds set.
+
+Custom From-Scratch Models (No U-Net)
+- Baseline custom model:
+  python crackseg/train.py    --config crackseg/config.yaml --model scratch_ed
+  python crackseg/evaluate.py --config crackseg/config.yaml --weights runs/scratch_ed/best.pth
+  python crackseg/infer.py    --config crackseg/config.yaml --weights runs/scratch_ed/best.pth --input <DATA_ROOT>/test --save ./outputs/infer_scratch
+- Stronger (ASPP, SE, residual; still non-U-Net):
+  python crackseg/train.py    --config crackseg/config.yaml --model scratch_ed_plus
+  python crackseg/evaluate.py --config crackseg/config.yaml --weights runs/scratch_ed_plus/best.pth

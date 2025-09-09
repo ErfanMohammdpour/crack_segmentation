@@ -18,6 +18,8 @@ from crackseg.data.utils_io import ensure_dir, resolve_paths_from_config, set_se
 from crackseg.metrics import compute_metrics
 from crackseg.models.unet_mini import UNetMini
 from crackseg.models.unet_mini_dropout import UNetMiniDropout
+from crackseg.models.scratch_ed import ScratchED
+from crackseg.models.scratch_ed_plus import ScratchEDPlus
 
 
 LOGGER = logging.getLogger("evaluate")
@@ -48,6 +50,13 @@ def build_model(name: str, cfg: Dict) -> torch.nn.Module:
         from crackseg.models.segformer_lite import SegFormerLite
 
         return SegFormerLite(encoder_name=str(cfg.get("ENCODER", "mobilenetv3_large_100")), pretrained=False)
+    if name == "scratch_ed":
+        base_ch = int(cfg.get("BASE_CHANNELS", 32))
+        return ScratchED(base_ch=base_ch)
+    if name == "scratch_ed_plus":
+        base_ch = int(cfg.get("BASE_CHANNELS", 32))
+        rates = list(cfg.get("ASPP_RATES", [1, 6, 12, 18]))
+        return ScratchEDPlus(base_ch=base_ch, aspp_rates=rates)
     raise ValueError(f"Unknown model: {name}")
 
 
@@ -109,4 +118,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

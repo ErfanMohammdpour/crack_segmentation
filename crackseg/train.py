@@ -20,6 +20,8 @@ from crackseg.losses import make_loss
 from crackseg.metrics import compute_metrics
 from crackseg.models.unet_mini import UNetMini
 from crackseg.models.unet_mini_dropout import UNetMiniDropout
+from crackseg.models.scratch_ed import ScratchED
+from crackseg.models.scratch_ed_plus import ScratchEDPlus
 from crackseg.vis import plot_curves, save_triptychs
 
 
@@ -50,6 +52,13 @@ def build_model(name: str, cfg: Dict) -> nn.Module:
         from crackseg.models.segformer_lite import SegFormerLite
 
         return SegFormerLite(encoder_name=str(cfg.get("ENCODER", "mobilenetv3_large_100")), pretrained=bool(cfg.get("PRETRAINED", 0)))
+    if name == "scratch_ed":
+        base_ch = int(cfg.get("BASE_CHANNELS", 32))
+        return ScratchED(base_ch=base_ch)
+    if name == "scratch_ed_plus":
+        base_ch = int(cfg.get("BASE_CHANNELS", 32))
+        rates = list(cfg.get("ASPP_RATES", [1, 6, 12, 18]))
+        return ScratchEDPlus(base_ch=base_ch, aspp_rates=rates)
     raise ValueError(f"Unknown model: {name}")
 
 
@@ -142,6 +151,9 @@ def main() -> None:
 
     # Model
     model = build_model(cfg["MODEL_NAME"], cfg).to(device)
+    # Log parameter count
+    n_params = sum(p.numel() for p in model.parameters())
+    LOGGER.info("Model %s with %.2fM params", cfg["MODEL_NAME"], n_params / 1e6)
     loss_fn = make_loss(cfg["LOSS"]).to(device)
 
     # Optimizer and scheduler

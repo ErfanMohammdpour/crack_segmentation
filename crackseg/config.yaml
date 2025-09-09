@@ -19,10 +19,12 @@ EARLY_STOPPING_PATIENCE: 8
 GRAD_CLIP_NORM: 1.0
 AMP: false
 
-MODEL_NAME: "unet_mini"
+MODEL_NAME: "scratch_ed"    # scratch_ed | scratch_ed_plus | unet_mini | unet_mini_dropout | segformer_lite
+BASE_CHANNELS: 32
+ASPP_RATES: [1, 6, 12, 18]
 DROPOUT: 0.3
 ENCODER: "segformer_b0"
 PRETRAINED: 1
 
 LOSS: "bce_dice"
-THRESHOLD: 0.5
+THRESHOLD: 0.4
