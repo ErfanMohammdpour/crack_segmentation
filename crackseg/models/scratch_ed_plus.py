@@ -17,6 +17,13 @@ import torch.nn.functional as F
 def conv3x3(in_ch: int, out_ch: int, stride: int = 1) -> nn.Conv2d:
     return nn.Conv2d(in_ch, out_ch, kernel_size=3, stride=stride, padding=1, bias=False)
 
+def _maybe_dropout(p: float) -> nn.Module:
+    """Return Identity if p<=0 else Dropout2d(p).
+
+    Dropout is active only during training (PyTorch default), and has no
+    learnable parameters, keeping checkpoints backward-compatible.
+    """
+    return nn.Identity() if p <= 0.0 else nn.Dropout2d(p)
 
 class SEBlock(nn.Module):
     def __init__(self, ch: int, reduction: int = 16):
@@ -82,10 +89,18 @@ class ASPP(nn.Module):
 
 
 class ScratchEDPlus(nn.Module):
-    def __init__(self, in_channels: int = 3, base_ch: int = 32, aspp_rates: List[int] | None = None):
+    def __init__(
+        self,
+        in_channels: int = 3,
+        base_ch: int = 32,
+        aspp_rates: List[int] | None = None,
+        dropout_p: float = 0.0,
+    ):
         super().__init__()
         if aspp_rates is None:
             aspp_rates = [1, 6, 12, 18]
+        # store for reference; modules use fixed instances created below
+        self.dropout_p = float(dropout_p)
         c1, c2, c3, c4 = base_ch, base_ch * 2, base_ch * 4, base_ch * 8
 
         # Encoder (stride-2 at stage entry)
@@ -96,24 +111,30 @@ class ScratchEDPlus(nn.Module):
         self.enc2 = nn.Sequential(
             ResidualBlock(c1, c2, stride=2, se=True),
             ResidualBlock(c2, c2, stride=1, se=True),
+            _maybe_dropout(self.dropout_p),  # dropout in deeper encoder stage
         )
         self.enc3 = nn.Sequential(
             ResidualBlock(c2, c3, stride=2, se=True),
             ResidualBlock(c3, c3, stride=1, se=True),
+            _maybe_dropout(self.dropout_p),  # dropout in deeper encoder stage
         )
 
         # Bottleneck with ASPP
         self.bot_pre = ResidualBlock(c3, c4, stride=2, se=True)  # H/8
         self.aspp = ASPP(c4, c4, rates=aspp_rates)
+        # Dropout after ASPP fusion acts as bottleneck regularization
+        self.drop_aspp = _maybe_dropout(self.dropout_p)
 
         # Decoder (no skips)
         self.dec3 = nn.Sequential(
             ResidualBlock(c4, c3, stride=1, se=True),
             ResidualBlock(c3, c3, stride=1, se=True),
+            _maybe_dropout(self.dropout_p),  # deeper decoder stage
         )
         self.dec2 = nn.Sequential(
             ResidualBlock(c3, c2, stride=1, se=True),
             ResidualBlock(c2, c2, stride=1, se=True),
+            _maybe_dropout(self.dropout_p),  # deeper decoder stage
         )
         self.dec1 = nn.Sequential(
             ResidualBlock(c2, c1, stride=1, se=True),
@@ -132,6 +153,7 @@ class ScratchEDPlus(nn.Module):
 
         b = self.bot_pre(e3)       # H/8, W/8
         b = self.aspp(b)
+        b = self.drop_aspp(b)
 
         d3 = self._upsample(self.dec3(b), e3)  # -> H/4
         d2 = self._upsample(self.dec2(d3), e2) # -> H/2
@@ -141,4 +163,3 @@ class ScratchEDPlus(nn.Module):
 
 
 __all__ = ["ScratchEDPlus"]
-

@@ -70,3 +70,13 @@ Custom From-Scratch Models (No U-Net)
 - Stronger (ASPP, SE, residual; still non-U-Net):
   python crackseg/train.py    --config crackseg/config.yaml --model scratch_ed_plus
   python crackseg/evaluate.py --config crackseg/config.yaml --weights runs/scratch_ed_plus/best.pth
+  
+  Regularization (optional dropout in deeper layers; default off):
+  - Train with dropout:    python crackseg/train.py    --config crackseg/config.yaml --model scratch_ed_plus --dropout 0.3
+  - Evaluate those weights: python crackseg/evaluate.py --config crackseg/config.yaml --weights runs/scratch_ed_plus/best.pth --model scratch_ed_plus
+  - Infer with dropout cfg: python crackseg/infer.py    --config crackseg/config.yaml --weights runs/scratch_ed_plus/best.pth --model scratch_ed_plus --input <DATA_ROOT>/test --save ./outputs/infer_scratch_plus
+
+Notes on dropout for scratch_ed_plus
+- Backward-compatible: if not provided, dropout_p=0.0 (inactive).
+- Dropout is applied only in deeper encoder/decoder blocks and bottleneck; stem and head remain clean.
+- During evaluation/inference (model.eval()), dropout is disabled automatically.

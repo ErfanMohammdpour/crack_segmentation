@@ -58,7 +58,8 @@ def build_model(name: str, cfg: Dict) -> nn.Module:
     if name == "scratch_ed_plus":
         base_ch = int(cfg.get("BASE_CHANNELS", 32))
         rates = list(cfg.get("ASPP_RATES", [1, 6, 12, 18]))
-        return ScratchEDPlus(base_ch=base_ch, aspp_rates=rates)
+        p = float(cfg.get("DROPOUT", 0.0))
+        return ScratchEDPlus(base_ch=base_ch, aspp_rates=rates, dropout_p=p)
     raise ValueError(f"Unknown model: {name}")
 
 
