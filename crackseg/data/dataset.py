@@ -89,7 +89,8 @@ class CocoCrackDataset(Dataset):
         self.total_len = self.base_len * max(1, int(self.aug_multiplier))
         if self.augment and self.aug_multiplier > 1:
             LOGGER.info("Training set augmented with multiplier=%d", self.aug_multiplier)
-        self.aug = TrainAugDocExact() if self.augment else None
+        # OpenCV-only augmenter operating in 0..1 float domain
+        self.aug = TrainAugDocExact(img_size=int(self.img_size)) if self.augment else None
 
     def __len__(self) -> int:
         return self.total_len
@@ -167,14 +168,25 @@ class CocoCrackDataset(Dataset):
         # 1) Load original image RGB uint8 and binary mask uint8 {0,1}
         image_u8, mask_u8 = self._load_image_and_mask(base_index)
 
-        # 2) Augment at original size (OpenCV-only), uint8 domain
+        # 2) Augmentation at original size (OpenCV-only), in 0..1 float domain
         if self.aug is not None:
-            image_u8, mask_u8 = self.aug(image_u8, mask_u8)
+            img01 = image_u8.astype(np.float32) / 255.0
+            msk01 = (mask_u8 > 0).astype(np.float32)
+            img01, msk01 = self.aug(img01, msk01)
+            # 3) Resize to target with correct interpolation, then re-binarize mask
+            size = (int(self.img_size), int(self.img_size))
+            img01 = cv2.resize(img01, size, interpolation=cv2.INTER_LINEAR)
+            msk01 = cv2.resize(msk01, size, interpolation=cv2.INTER_NEAREST)
+            msk01 = (msk01 > 0.5).astype(np.float32)
+            x = self._normalize(img01)
+            x = np.transpose(x, (2, 0, 1))
+            y = msk01[None, ...].astype(np.float32)
+            return torch.from_numpy(x), torch.from_numpy(y)
 
-        # 3) Resize to target
+        # 3) No augmentation: resize first
         image_u8, mask_u8 = self._resize(image_u8, mask_u8)
 
-        # 4) Normalize and tensorize (only now convert to float32)
+        # 4) Normalize and tensorize in 0..1
         x = image_u8.astype(np.float32) / 255.0
         x = self._normalize(x)
         x = np.transpose(x, (2, 0, 1))

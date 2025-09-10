@@ -5,7 +5,7 @@ OUTPUTS_DIR: "./outputs"
 IMG_SIZE: 512
 BATCH_SIZE: 1
 NUM_WORKERS: 0
-AUG_MULTIPLIER: 1
+AUG_MULTIPLIER: 5  # on-the-fly: effectively 5x train set
 
 MEAN: [0.485, 0.456, 0.406]
 STD: [0.229, 0.224, 0.225]

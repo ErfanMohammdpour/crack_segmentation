@@ -58,8 +58,9 @@ Outputs
   - visuals/: qualitative overlays
 
 Notes
-- Augmentation uses only OpenCV (rotation, scaling, brightness/contrast, Gaussian noise).
-- Masks are resized with INTER_NEAREST and kept as {0,1}.
+- Augmentation (OpenCV-only): rotate ±30°, scale 0.8–1.2, brightness/contrast ±20%, Gaussian σ=10/255.
+- Applied only on train with identical geometry to masks (mask: INTER_NEAREST, kept binary).
+- On-the-fly via `AUG_MULTIPLIER` (e.g., 5); no aug on valid/test for official metrics.
 - Mixed precision (AMP) enabled; deterministic seeds set.
 
 Custom From-Scratch Models (No U-Net)
@@ -80,3 +81,10 @@ Notes on dropout for scratch_ed_plus
 - Backward-compatible: if not provided, dropout_p=0.0 (inactive).
 - Dropout is applied only in deeper encoder/decoder blocks and bottleneck; stem and head remain clean.
 - During evaluation/inference (model.eval()), dropout is disabled automatically.
+
+Augmentation Auditing (Offline 5x Generator)
+- Generate 5 deterministic augmented variants per image for any split (for visualization only):
+  python crackseg/tools/offline_augment.py --config crackseg/config.yaml --split train --save ./outputs/offline_aug5_train
+  # also valid/test if desired (not for official metrics)
+  python crackseg/tools/offline_augment.py --config crackseg/config.yaml --split valid --save ./outputs/offline_aug5_valid
+  python crackseg/tools/offline_augment.py --config crackseg/config.yaml --split test  --save ./outputs/offline_aug5_test
