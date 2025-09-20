@@ -5,7 +5,7 @@
 
 ## Outputs and runs
 /outputs/
-/runs/
+
 logs/
 wandb/
 mlruns/
@@ -77,3 +77,6 @@ Thumbs.db
 
 ## Non-core docs
 *.docx
+
+# Keep documentation images checked in
+!docs/images/**

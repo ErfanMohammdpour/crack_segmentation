@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>مستند فارسی پروژه CrackSeg</title>
+  <style>
+    body { font-family: Vazirmatn, Tahoma, sans-serif; line-height: 1.8; margin: 24px; color: #222; }
+    h1, h2, h3 { color: #0b3d5c; }
+    code, pre { background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 6px; padding: 2px 6px; }
+    pre { padding: 12px; overflow: auto; }
+    .note { background: #fff9e6; border-left: 4px solid #f0c36d; padding: 8px 12px; margin: 12px 0; }
+    .ok { background: #e6fff3; border-left: 4px solid #28a745; padding: 8px 12px; margin: 12px 0; }
+    .warn { background: #ffecec; border-left: 4px solid #e5534b; padding: 8px 12px; margin: 12px 0; }
+    ul { margin: 0 0 1rem 0; padding-right: 1.2rem; }
+    li { margin: .25rem 0; }
+  </style>
+  <!-- برای رندر صحیح اعداد به‌صورت LTR -->
+  <style>
+    .ltr { direction: ltr; display: inline-block; }
+  </style>
+</head>
+<body>
+  <h1>مستند کامل پروژه CrackSeg (فارسی)</h1>
+
+  <p>
+    این پروژه یک چارچوب کامل برای <strong>سگمنتیشن ترک</strong> (Crack Segmentation) روی تصاویر را فراهم می‌کند.
+    داده‌ها در قالب COCO برای سه بخش <code>train</code>، <code>valid</code> و <code>test</code> سازماندهی شده‌اند و مدل‌های مختلفی
+    (از مدل‌های ساده تا SegFormer-Lite) پشتیبانی می‌شود. کل فرایند آموزش، ارزیابی، و استنتاج (Infer) قابل اجراست.
+  </p>
+
+  <h2>معماری و جریان کلی</h2>
+  <ol>
+    <li>پیکربندی از فایل <code>crackseg/config.yaml</code> خوانده می‌شود (مسیر داده، اندازه تصویر، هایپرپارامترها، ...).</li>
+    <li>در آموزش: دیتاست <code>CocoCrackDataset</code> برای <code>train</code> با افزونه‌های OpenCV فعال و برای <code>valid</code> بدون افزونه ساخته می‌شود.</li>
+    <li>مدل بر اساس <code>MODEL_NAME</code> ساخته می‌شود (مثلاً <code>scratch_ed</code>، <code>scratch_ed_plus</code>، <code>unet_mini</code>، <code>segformer_lite</code>...).</li>
+    <li>حلقه آموزش با لاگ‌گیری، کاهش LR روی Plateau، Early Stopping، و ذخیره بهترین مدل (بهترین IoU) اجرا می‌شود.</li>
+    <li>در ارزیابی (Evaluate) روی <code>test</code> هیچ افزونه‌ای اعمال نمی‌شود و معیارها محاسبه و ذخیره می‌شوند.</li>
+    <li>در استنتاج (Infer) روی یک پوشه یا یک تصویر، ماسک دودویی و تصویر همپوشان (overlay) ذخیره می‌گردد.</li>
+  </ol>
+
+  <h2>ساختار پوشه‌ها</h2>
+  <ul>
+    <li><code>crackseg/train.py</code>: اسکریپت اصلی آموزش.</li>
+    <li><code>crackseg/evaluate.py</code>: ارزیابی روی <code>test</code>.</li>
+    <li><code>crackseg/infer.py</code>: استنتاج روی پوشه یا فایل.</li>
+    <li><code>crackseg/data/dataset.py</code>: دیتاست COCO و پیش‌پردازش/نرمال‌سازی.</li>
+    <li><code>crackseg/data/augment.py</code>: افزونه‌های دقیق OpenCV (فقط برای train).</li>
+    <li><code>crackseg/data/utils_io.py</code>: ابزارهای I/O، انتخاب device، تنظیم seed، مسیرها.</li>
+    <li><code>crackseg/models/*.py</code>: پیاده‌سازی مدل‌ها (UNet، ScratchED، SegFormer-Lite...).</li>
+    <li><code>crackseg/losses.py</code> و <code>crackseg/metrics.py</code>: ضرایب هزینه و معیارها (IoU/Dice و ...).</li>
+    <li><code>crackseg/vis.py</code>: رسم منحنی‌ها و ذخیره نمونه‌های بصری.</li>
+    <li><code>crackseg/tools/offline_augment.py</code>: تولید ۵ نسخه افزوده‌شدهٔ آفلاین برای ممیزی.</li>
+    <li><code>crackseg/config.yaml</code>: تنظیمات پروژه.</li>
+  </ul>
+
+  <h2>پیکربندی (config.yaml)</h2>
+  <ul>
+    <li><code>DATA_ROOT</code>: ریشهٔ دیتاست (حاوی پوشه‌های <code>train</code>، <code>valid</code>، <code>test</code>).</li>
+    <li><code>IMG_SIZE</code>: اندازه تصویر ورودی (مثلاً 512).</li>
+    <li><code>AUG_MULTIPLIER</code>: چندبرابر کردن طول دیتاست train به شکل on-the-fly؛ نمونه‌ها با افزونه‌های تصادفی تکرار می‌شوند.</li>
+    <li><code>MEAN</code> و <code>STD</code>: نرمال‌سازی به سبک ImageNet.</li>
+    <li>هایپرپارامترها: <code>EPOCHS</code>، <code>LR</code>، <code>OPTIMIZER</code>، <code>WEIGHT_DECAY</code>، <code>EARLY_STOPPING_PATIENCE</code>، <code>AMP</code>، و ...</li>
+    <li>مدل: <code>MODEL_NAME</code>، برای SegFormer-Lite پارامترهای <code>ENCODER</code>، <code>PRETRAINED</code>، <code>FREEZE_EPOCHS</code>، <code>LR_HEAD</code>، <code>LR_ENCODER</code>.</li>
+  </ul>
+
+  <div class="note">
+    <strong>نکته:</strong> <code>AUG_MULTIPLIER</code> شدت تبدیلات را تغییر نمی‌دهد؛ فقط هر تصویر پایه را چند بار با پارامترهای تصادفی جدید در هر epoch می‌بیند.
+  </div>
+
+  <h2>افزونه‌ها (Augmentation) — OpenCV فقط</h2>
+  <p>
+    در فایل <code>crackseg/data/augment.py</code> کلاس <code>TrainAugDocExact</code> پیاده‌سازی شده است. ورودی و خروجی در مقیاس 0..1 (float32) هستند.
+  </p>
+  <ul>
+    <li>چرخش تصادفی در بازهٔ ±30 درجه.</li>
+    <li>مقیاس تصادفی در بازهٔ 1.2 — 0.8.</li>
+    <li>کنتراست (α) در بازهٔ ±20٪ و روشنایی (β) در بازهٔ ±20٪: <code>img' = clip(alpha * img + beta, 0, 1)</code>.</li>
+    <li>نویز گوسی با σ=10/255 (مقیاس 0..1) فقط روی تصویر.</li>
+    <li>هندسهٔ ماسک و تصویر مشترک (یک ماتریس affine)؛ تصویر با <code>INTER_LINEAR</code>، ماسک با <code>INTER_NEAREST</code>.</li>
+    <li>ماسک بعد از warp/resize مجدداً دودویی {0,1} می‌شود.</li>
+    <li>هیچ برش (crop) یا برگردانی (flip) انجام نمی‌شود.</li>
+  </ul>
+
+  <h2>دیتاست (dataset.py)</h2>
+  <ul>
+    <li>قالب COCO برای هر split (تصاویر + <code>_annotations.coco.json</code>).</li>
+    <li>تشخیص دستهٔ مثبت: هر category که نام آن شامل «crack» باشد.</li>
+    <li>تولید ماسک دودویی با union همهٔ annotationهای مثبت؛ در نبود segment، از bbox استفاده می‌شود.</li>
+    <li>Pipeline بازیابی نمونه:
+      <ol>
+        <li>خواندن تصویر BGR و تبدیل به RGB (uint8).</li>
+        <li>اگر <code>augment=True</code> باشد: تبدیل به 0..1 و اعمال <code>TrainAugDocExact</code>.</li>
+        <li>تغییر اندازه به <code>IMG_SIZE</code> (تصویر: <code>INTER_LINEAR</code>، ماسک: <code>INTER_NEAREST</code>، ماسک دودویی).</li>
+        <li>نرمال‌سازی با MEAN/STD، ترتیب کانال‌ها (C,H,W)، بازگشت تانسورهای torch.</li>
+      </ol>
+    </li>
+    <li><code>__len__</code> برابر است با <code>base_len × AUG_MULTIPLIER</code> (برای train).</li>
+  </ul>
+
+  <h2>آموزش (train.py)</h2>
+  <ul>
+    <li>خواندن config و override پارامترها از CLI (مدل، dropout، encoder، ...).</li>
+    <li>ساخت DataLoaderها: <code>train</code> با <code>augment=True</code> و <code>aug_multiplier=AUG_MULTIPLIER</code>، و <code>valid</code> بدون افزونه.</li>
+    <li>ساخت مدل و loss؛ گروه‌بندی پارامترها برای LR جداگانهٔ encoder/head (اختیاری).</li>
+    <li>AMP روی CUDA فعال است (<code>AMP: true</code> در YAML).</li>
+    <li>ذخیره بهترین وزن‌ها بر اساس IoU، ثبت لاگ‌ها و ترسیم نمودارها.</li>
+  </ul>
+
+  <h2>مدل‌ها (models)</h2>
+  <ul>
+    <li><code>unet_mini.py</code> / <code>unet_mini_dropout.py</code>: پیاده‌سازی U-Net ساده (با/بدون Dropout).</li>
+    <li><code>scratch_ed.py</code> / <code>scratch_ed_plus.py</code>: مدل‌های سبک از صفر (نسخهٔ Plus قوی‌تر است؛ ASPP و residual و ...).</li>
+    <li><code>segformer_lite.py</code>: استفاده از backboneهای <code>timm</code> با <code>features_only=True</code> و decoder سبک top-down.
+      اگر دانلود وزن‌های pretrained ممکن نباشد، از init تصادفی استفاده می‌کند.</li>
+  </ul>
+
+  <h2>ارزیابی و استنتاج</h2>
+  <ul>
+    <li><code>evaluate.py</code>: ارزیابی روی split <code>test</code> (بدون augmentation)، محاسبهٔ IoU/Dice و ذخیرهٔ <code>metrics_test.json</code>.</li>
+    <li><code>infer.py</code>: پیش‌بینی روی پوشه یا یک تصویر، خروجی ماسک دودویی و overlay رنگی.</li>
+  </ul>
+
+  <h2>افزونهٔ آفلاین ۵× (برای ممیزی)</h2>
+  <p>
+    اسکریپت <code>crackseg/tools/offline_augment.py</code> برای هر تصویر ۵ نسخهٔ افزوده‌شدهٔ <em>قطعی</em> می‌سازد و ذخیره می‌کند.
+    این خروجی‌ها برای آموزش/ارزیابی رسمی استفاده نمی‌شوند؛ صرفاً برای نمایش و بازرسی هستند.
+  </p>
+  <pre><code class="ltr">python crackseg/tools/offline_augment.py --config crackseg/config.yaml --split train --save ./outputs/offline_aug5_train --seed 42</code></pre>
+
+  <h2>دستورات نمونهٔ کلیدی</h2>
+  <ul>
+    <li>Train (ScratchED-Plus بدون dropout):<br/>
+      <code class="ltr">python -m crackseg.train --config crackseg/config.yaml --model scratch_ed_plus --dropout 0.0</code></li>
+    <li>Evaluate (ScratchED-Plus):<br/>
+      <code class="ltr">python -m crackseg.evaluate --config crackseg/config.yaml --weights runs/scratch_ed_plus/best.pth --model scratch_ed_plus</code></li>
+    <li>Infer روی کل test (SegFormer-Lite):<br/>
+      <code class="ltr">python -m crackseg.infer --config crackseg/config.yaml --weights runs/segformer_lite/best.pth --model segformer_lite --encoder segformer_b0 --pretrained 1 --input &lt;DATA_ROOT&gt;/test --save ./outputs/infer_segformer</code></li>
+  </ul>
+
+  <h2>نکات و عیب‌یابی</h2>
+  <ul>
+    <li>اگر آموزش خیلی زود متوقف شد: <code>EARLY_STOPPING_PATIENCE</code> را افزایش دهید و مطمئن شوید <code>valid</code> داده کافی دارد.</li>
+    <li>برای GPU: <code>AMP: true</code> باعث سرعت و کاهش حافظه می‌شود؛ روی CPU تاثیری ندارد.</li>
+    <li>برای خاموش کردن کامل augmentation در train، باید <code>augment=False</code> شود (تغییر در کد یا افزودن کلید پیکربندی).</li>
+  </ul>
+
+  <hr/>
+  <p>نسخهٔ مستند: 1.0 — این فایل توضیحاتی دقیق و خلاصه از تمام اجزاء پروژه ارائه می‌دهد.</p>
+</body>
+</html>
+

@@ -1,0 +1,73 @@
+Quick Command Guide (Train / Evaluate / Infer / Augment)
+
+Prerequisites:
+- Config file: crackseg/config.yaml (set DATA_ROOT, IMG_SIZE, AUG_MULTIPLIER, etc.)
+- Run from the repository root
+- Placeholders like <DATA_ROOT> must be replaced with your actual paths
+
+============================================================
+Train
+============================================================
+# ScratchED (no dropout)
+python -m crackseg.train --config crackseg/config.yaml --model scratch_ed
+
+# ScratchED-Plus (no dropout)
+python -m crackseg.train --config crackseg/config.yaml --model scratch_ed_plus --dropout 0.0
+
+# ScratchED-Plus (with dropout, e.g., 0.3)
+python -m crackseg.train --config crackseg/config.yaml --model scratch_ed_plus --dropout 0.3
+
+# U-Net Mini (baseline)
+python -m crackseg.train --config crackseg/config.yaml --model unet_mini
+
+# U-Net Mini + Dropout (e.g., 0.3)
+python -m crackseg.train --config crackseg/config.yaml --model unet_mini_dropout --dropout 0.3
+
+# SegFormer-Lite (with encoder + pretrained)
+python -m crackseg.train --config crackseg/config.yaml --model segformer_lite --encoder segformer_b0 --pretrained 1
+
+# SegFormer-Lite (freeze warm-up + two LR groups)
+python -m crackseg.train --config crackseg/config.yaml --model segformer_lite --encoder segformer_b0 --pretrained 1 --freeze-epochs 5 --lr-head 1e-3 --lr-encoder 1e-4
+
+Note: OpenCV-only augmentations (rotate ±30°, scale 0.8–1.2, brightness/contrast ±20%, noise σ=10/255) are applied on-the-fly to the train split only. Intensity/duplication is controlled by `AUG_MULTIPLIER` in the YAML (e.g., 5).
+
+============================================================
+Evaluate (official, on original test split)
+============================================================
+# ScratchED
+python -m crackseg.evaluate --config crackseg/config.yaml --weights runs/scratch_ed/best.pth --model scratch_ed
+
+# ScratchED-Plus
+python -m crackseg.evaluate --config crackseg/config.yaml --weights runs/scratch_ed_plus/best.pth --model scratch_ed_plus
+
+# U-Net Mini
+python -m crackseg.evaluate --config crackseg/config.yaml --weights runs/unet_mini/best.pth --model unet_mini
+
+# U-Net Mini + Dropout
+python -m crackseg.evaluate --config crackseg/config.yaml --weights runs/unet_mini_dropout/best.pth --model unet_mini_dropout
+
+# SegFormer-Lite
+python -m crackseg.evaluate --config crackseg/config.yaml --weights runs/segformer_lite/best.pth --model segformer_lite --encoder segformer_b0 --pretrained 1
+
+============================================================
+Infer (run on a folder or a single image)
+============================================================
+# On the entire test folder (outputs under ./outputs/infer_<model>)
+python -m crackseg.infer --config crackseg/config.yaml --weights runs/scratch_ed/best.pth         --model scratch_ed         --input <DATA_ROOT>/test --save ./outputs/infer_scratch
+python -m crackseg.infer --config crackseg/config.yaml --weights runs/scratch_ed_plus/best.pth    --model scratch_ed_plus    --input <DATA_ROOT>/test --save ./outputs/infer_scratch_plus
+python -m crackseg.infer --config crackseg/config.yaml --weights runs/unet_mini/best.pth          --model unet_mini          --input <DATA_ROOT>/test --save ./outputs/infer_unet
+python -m crackseg.infer --config crackseg/config.yaml --weights runs/unet_mini_dropout/best.pth  --model unet_mini_dropout  --input <DATA_ROOT>/test --save ./outputs/infer_unet_do
+python -m crackseg.infer --config crackseg/config.yaml --weights runs/segformer_lite/best.pth     --model segformer_lite     --encoder segformer_b0 --pretrained 1 --input <DATA_ROOT>/test --save ./outputs/infer_segformer
+
+# On a single image
+python -m crackseg.infer --config crackseg/config.yaml --weights runs/scratch_ed_plus/best.pth --model scratch_ed_plus --input /path/to/image.jpg --save ./outputs/infer_single
+
+============================================================
+Augmentation (offline 5× generator — auditing only)
+============================================================
+# Produce 5 deterministic augmented variants per image for any split (do NOT use for official metrics)
+python crackseg/tools/offline_augment.py --config crackseg/config.yaml --split train --save ./outputs/offline_aug5_train --seed 42
+python crackseg/tools/offline_augment.py --config crackseg/config.yaml --split valid --save ./outputs/offline_aug5_valid --seed 42
+python crackseg/tools/offline_augment.py --config crackseg/config.yaml --split test  --save ./outputs/offline_aug5_test  --seed 42
+
+Note: These outputs are for visualization/auditing only. Official training/evaluation do not consume these files. Geometry is identical between image and mask (mask uses INTER_NEAREST and is binary).
