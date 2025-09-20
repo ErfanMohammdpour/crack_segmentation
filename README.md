@@ -15,10 +15,10 @@ Training Curves (live from runs)
 ![U-Net Mini Metrics](runs/unet_mini/plots/metrics_curves.png)
 ![SegFormer-Lite Metrics](runs/segformer_lite/plots/metrics_curves.png)
 
-Qualitative Samples (from runs/.../visuals)
-![ED-Plus Sample](runs/scratch_ed_plus/visuals/sample_0.png)
-![U-Net Mini Sample](runs/unet_mini/visuals/sample_0.png)
-![SegFormer-Lite Sample](runs/segformer_lite/visuals/sample_0.png)
+Qualitative Samples
+![ED-Plus Sample](docs/images/ed_plus_sample.jpg)
+![U-Net Mini Sample](docs/images/unet_sample.jpg)
+![SegFormer-Lite Sample](docs/images/segformer_sample.jpg)
 
 Repository Layout
 - crackseg/
@@ -128,4 +128,3 @@ Offline Aug Audit (do not use for metrics)
 `python crackseg/tools/offline_augment.py --config crackseg/config.yaml --split train --save ./outputs/offline_aug5_train --seed 42`
 `python crackseg/tools/offline_augment.py --config crackseg/config.yaml --split valid --save ./outputs/offline_aug5_valid --seed 42`
 `python crackseg/tools/offline_augment.py --config crackseg/config.yaml --split test  --save ./outputs/offline_aug5_test  --seed 42`
-
