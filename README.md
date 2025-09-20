@@ -10,10 +10,10 @@ Models at a Glance
 - U-Net Mini: classic U-Net downsized for CPU; solid baseline with skip connections. Dropout variant improves generalization.
 - SegFormer-Lite: transformer-based encoder (from timm) with a light head; highest capacity if you can afford a bit more compute.
 
-Training Curves (live from runs)
-![ED-Plus Metrics](runs/scratch_ed_plus/plots/metrics_curves.png)
-![U-Net Mini Metrics](runs/unet_mini/plots/metrics_curves.png)
-![SegFormer-Lite Metrics](runs/segformer_lite/plots/metrics_curves.png)
+Training Curves
+![ED-Plus Metrics](docs/images/ed_plus_metrics.png)
+![U-Net Mini Metrics](docs/images/unet_metrics.png)
+![SegFormer-Lite Metrics](docs/images/segformer_metrics.png)
 
 Qualitative Samples
 ![ED-Plus Sample](docs/images/ed_plus_sample.jpg)
