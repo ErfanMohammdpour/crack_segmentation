@@ -6,33 +6,51 @@ Course / applied CV project. Real training logs under `runs/`.
 
 ## Dataset (ours)
 
-We built and curated this dataset ourselves for the course project (COCO segmentation export on Roboflow).
+We **collected / curated** this pavement-crack set ourselves for the course project, then labeled it **manually as COCO polygon segmentation** on Roboflow (not auto-generated masks).
 
-- **Corrected export (v3 / version2):** misaligned image–mask pairs were fixed.
-- Credit for mask alignment cleanup: **Mr. Seyfouri (آقای صیفوری)**.
-- Format: COCO per split (`train` / `valid` / `test` + `_annotations.coco.json`).
-- Positive class = any category whose name contains `crack`.
+- **Corrected export:** `crack segmentation.v3-version2` (COCO segmentation) — image–mask mismatches fixed.
+- Mask-alignment cleanup credit: **Mr. Seyfouri (آقای صیفوری)**.
+- Layout after unzip: `train/` · `valid/` · `test/` each with `_annotations.coco.json` + images.
+- Loader rule: positive = category name containing `crack` (case-insensitive).
 
-**Download (corrected version):**
+### Size (this export)
+
+| Split | Images | COCO annotations |
+|-------|--------|------------------|
+| **train** | **2078** | 2471 |
+| **valid** | **8** | 8 |
+| **test** | **27** | 28 |
+| **Total** | **2113** | 2507 |
+
+### Download
 
 ```bash
 curl -L "https://app.roboflow.com/ds/035L0MXWQ7?key=Ar7SlkKyBk" > roboflow.zip
 unzip roboflow.zip && rm roboflow.zip
 ```
 
-Direct link: [Roboflow export `035L0MXWQ7`](https://app.roboflow.com/ds/035L0MXWQ7?key=Ar7SlkKyBk)  
-Export name: `crack segmentation.v3-version2` (COCO segmentation).
+Link: [Roboflow export `035L0MXWQ7`](https://app.roboflow.com/ds/035L0MXWQ7?key=Ar7SlkKyBk)
 
-Point `DATA_ROOT` in `crackseg/config.yaml` at the unzipped folder.
+Set `DATA_ROOT` in `crackseg/config.yaml` to the unzipped folder.
 
-### Dataset samples (from our corrected test split)
+### Samples from each split
 
-![Dataset samples grid](docs/images/dataset_samples/dataset_samples_grid.jpg)
-
-| | | |
+| train | valid | test |
 |:---:|:---:|:---:|
-| ![ds01](docs/images/dataset_samples/ds_01.jpg) | ![ds02](docs/images/dataset_samples/ds_02.jpg) | ![ds03](docs/images/dataset_samples/ds_03.jpg) |
-| ![ds04](docs/images/dataset_samples/ds_04.jpg) | ![ds05](docs/images/dataset_samples/ds_05.jpg) | ![ds06](docs/images/dataset_samples/ds_06.jpg) |
+| ![train](docs/images/dataset_samples/split_train.jpg) | ![valid](docs/images/dataset_samples/split_valid.jpg) | ![test](docs/images/dataset_samples/split_test.jpg) |
+
+### Manual COCO labels (image | polygon mask)
+
+Green = hand-drawn COCO segmentation polygon · red = bbox from the same annotation.
+
+![COCO labels grid](docs/images/dataset_samples/coco_labels_grid.jpg)
+
+More per split:
+
+| train | valid | test |
+|:---:|:---:|:---:|
+| ![ct1](docs/images/dataset_samples/coco_train_01.jpg) | ![cv1](docs/images/dataset_samples/coco_valid_01.jpg) | ![cte1](docs/images/dataset_samples/coco_test_01.jpg) |
+| ![ct2](docs/images/dataset_samples/coco_train_02.jpg) | ![cv2](docs/images/dataset_samples/coco_valid_02.jpg) | ![cte2](docs/images/dataset_samples/coco_test_02.jpg) |
 
 ## Results (validation, from committed `runs/*/logs.csv`)
 
@@ -80,5 +98,5 @@ More recipes: `COMMANDS.txt`.
 crackseg/                      package (data, models, train/eval/infer)
 runs/                          training logs per model
 docs/images/                   prediction samples + metric plots
-docs/images/dataset_samples/   raw frames from our corrected dataset
+docs/images/dataset_samples/   train/valid/test frames + COCO label overlays
 ```
