@@ -1,4 +1,4 @@
-DATA_ROOT: "./data"  # COCO splits from Roboflow/Ultralytics crack export — see README Dataset
+DATA_ROOT: "./data"  # our corrected Roboflow COCO export — see README Dataset
 RUNS_DIR: "./runs"
 OUTPUTS_DIR: "./outputs"
 
