@@ -1,125 +1,65 @@
-Crack Segmentation (CPU Only, Windows Friendly)
+# Crack Segmentation
 
-Why this repo
-- Simple, reproducible crack segmentation on CPU-only machines.
-- Three practical model choices: ED-Plus, U-Net Mini, and SegFormer-Lite.
-- Human-friendly recipes, visuals, and ready-to-run commands.
+CPU-friendly pavement / concrete **crack segmentation** with three models: **ED-Plus**, **U-Net Mini**, **SegFormer-Lite**.
 
-Models at a Glance
-- ED-Plus (a.k.a. scratch_ed_plus): lightweight encoder–decoder tuned for thin structures like cracks; fast and compact.
-- U-Net Mini: classic U-Net downsized for CPU; solid baseline with skip connections. Dropout variant improves generalization.
-- SegFormer-Lite: transformer-based encoder (from timm) with a light head; highest capacity if you can afford a bit more compute.
+Course / applied CV project. Real training logs committed under `runs/`.
 
-Qualitative Samples
-![ED-Plus Sample](docs/images/ed_plus_sample.jpg)
-![U-Net Mini Sample](docs/images/unet_sample.jpg)
-![SegFormer-Lite Sample](docs/images/segformer_sample.jpg)
+## Dataset
 
-Repository Layout
-- crackseg/
-  - data/: dataset loader, augmentations, I/O helpers
-  - models/: ED/ScratchED family, U-Net Mini, optional SegFormer-Lite head
-  - losses.py, metrics.py
-  - train.py, evaluate.py, infer.py, vis.py
-  - config.yaml
-- Root wrappers: train.py, evaluate.py, infer.py (call into crackseg/*)
+COCO-style splits (`train` / `valid` / `test`) with `_annotations.coco.json`.  
+Positive class = any category whose name contains `crack`.
 
-Requirements (CPU only)
-- Python >= 3.9
-- PyTorch (CPU wheels)
-- OpenCV-Python
-- pycocotools-windows (Windows) or pycocotools (Linux/macOS)
-- numpy, pyyaml, tqdm, matplotlib
+**Public dataset links (same problem family · export COCO Segmentation):**
 
-Installation (Windows PowerShell)
-1) Create a virtual environment
-   `python -m venv .venv`
-   `.\\.venv\\Scripts\\Activate.ps1`
-2) Install dependencies (CPU wheels)
-   `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu`
-   `pip install opencv-python numpy pyyaml tqdm matplotlib`
-   `pip install pycocotools-windows`  # Linux/mac: `pip install pycocotools`
+- [Roboflow Universe — crack (university-bswxt/crack-bphdr)](https://universe.roboflow.com/university-bswxt/crack-bphdr)  
+- [Ultralytics Crack-Seg](https://docs.ultralytics.com/datasets/segment/crack-seg/) (~4k images; based on Roboflow crack data)
 
-Dataset Setup (COCO per split)
-`<DATA_ROOT>/`
-  `train/`  `_annotations.coco.json`, images
-  `valid/`  `_annotations.coco.json`, images
-  `test/`   `_annotations.coco.json`, images
+After download/export, point `DATA_ROOT` in `crackseg/config.yaml` at the folder that contains `train/`, `valid/`, `test/`.
 
-Binary rule: positive = any category whose name contains "crack" (case-insensitive). All else is background.
+## Results (validation, from committed `runs/*/logs.csv`)
 
-Config
-- Edit `crackseg/config.yaml`:
-  - `DATA_ROOT`: absolute dataset path (or use sample_data for a smoke test)
-  - `IMG_SIZE`: 512 (or 256 for faster CPU runs)
-  - `BATCH_SIZE`: 2, `NUM_WORKERS`: 0 (Windows-safe)
-  - `EPOCHS`: 30 (adjust as needed)
-  - `MODEL_NAME`: `scratch_ed_plus | unet_mini | unet_mini_dropout | segformer_lite`
-  - `LOSS`: `bce_dice` (default), `threshold`: 0.5
+| Model | Best val IoU | Best val Dice | Epoch |
+|-------|--------------|---------------|-------|
+| **SegFormer-Lite** | **0.548** | **0.670** | 21 |
+| ED-Plus (`scratch_ed_plus`) | 0.529 | 0.655 | 21 |
+| U-Net Mini | 0.515 | 0.643 | 28 |
 
-Quick Start
-1) Set `DATA_ROOT` in `crackseg/config.yaml`
-2) Train your chosen model (see commands below)
-3) Evaluate on the test split
-4) Run inference to export overlays
+These are **validation** curves during training — not a frozen public test leaderboard. Weights (`.pth`) are not in git (large); logs + qualitative figs are.
 
-Model Guides (commands adapted from COMMANDS.txt)
+![SegFormer sample](docs/images/segformer_sample.jpg)
+![ED-Plus sample](docs/images/ed_plus_sample.jpg)
+![U-Net sample](docs/images/unet_sample.jpg)
 
-ED-Plus (alias: `scratch_ed_plus`)
-- Train (no dropout):
-  `python -m crackseg.train --config crackseg/config.yaml --model scratch_ed_plus --dropout 0.0`
-- Train (with dropout, e.g., 0.3):
-  `python -m crackseg.train --config crackseg/config.yaml --model scratch_ed_plus --dropout 0.3`
-- Evaluate:
-  `python -m crackseg.evaluate --config crackseg/config.yaml --weights runs/scratch_ed_plus/best.pth --model scratch_ed_plus`
-- Infer (folder):
-  `python -m crackseg.infer --config crackseg/config.yaml --weights runs/scratch_ed_plus/best.pth --model scratch_ed_plus --input <DATA_ROOT>/test --save ./outputs/infer_scratch_plus`
+Curves: `docs/images/*_metrics.png`
 
-U-Net Mini (baseline)
-- Train:
-  `python -m crackseg.train --config crackseg/config.yaml --model unet_mini`
-- Train + Dropout (e.g., 0.3):
-  `python -m crackseg.train --config crackseg/config.yaml --model unet_mini_dropout --dropout 0.3`
-- Evaluate:
-  `python -m crackseg.evaluate --config crackseg/config.yaml --weights runs/unet_mini/best.pth --model unet_mini`
-- Infer (folder):
-  `python -m crackseg.infer --config crackseg/config.yaml --weights runs/unet_mini/best.pth --model unet_mini --input <DATA_ROOT>/test --save ./outputs/infer_unet`
+## Models
 
-SegFormer-Lite (requires `timm`)
-- Install backbones: `pip install timm`
-- Train (with encoder + pretrained):
-  `python -m crackseg.train --config crackseg/config.yaml --model segformer_lite --encoder segformer_b0 --pretrained 1`
-- Freeze warm-up + dual LR groups:
-  `python -m crackseg.train --config crackseg/config.yaml --model segformer_lite --encoder segformer_b0 --pretrained 1 --freeze-epochs 5 --lr-head 1e-3 --lr-encoder 1e-4`
-- Evaluate:
-  `python -m crackseg.evaluate --config crackseg/config.yaml --weights runs/segformer_lite/best.pth --model segformer_lite --encoder segformer_b0 --pretrained 1`
-- Infer (folder):
-  `python -m crackseg.infer --config crackseg/config.yaml --weights runs/segformer_lite/best.pth --model segformer_lite --encoder segformer_b0 --pretrained 1 --input <DATA_ROOT>/test --save ./outputs/infer_segformer`
+- **ED-Plus** — light encoder–decoder for thin cracks  
+- **U-Net Mini** — small U-Net baseline (+ optional dropout)  
+- **SegFormer-Lite** — `timm` SegFormer-B0 + light head  
 
-Outputs
-- `runs/<model_name>/`: `best.pth`, `config_snapshot.yaml`, `logs.csv`, `plots/`, `visuals/`
-- `outputs/metrics_test.json` (from `evaluate.py`)
+Loss: BCE + Dice. Seed 42.
 
-Visualizations
-- Training saves curves and 8 qualitative triptychs under `runs/<model_name>/`.
-- Regenerate curves from `logs.csv`:
-  `python -c "from crackseg.vis import plot_curves; import pathlib; plot_curves(pathlib.Path('runs/unet_mini/logs.csv'), pathlib.Path('runs/unet_mini/plots'))"`
+## Quick start
 
-Reproducibility & Determinism
-- Seeds for random/numpy/torch set to 42; cuDNN flags are disabled on CPU.
-- AMP disabled on CPU; gradient clipping enabled.
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip install opencv-python numpy pyyaml tqdm matplotlib pycocotools
+# optional SegFormer: pip install timm
 
-Troubleshooting
-- Windows COCO API: `pip install pycocotools-windows`
-- Slow CPU: set `IMG_SIZE=256`, `EPOCHS=10` for quick tests.
-- OOM: lower `BATCH_SIZE` or `IMG_SIZE`.
-- Empty masks: ensure category names contain "crack".
+# set DATA_ROOT in crackseg/config.yaml
+python -m crackseg.train --config crackseg/config.yaml --model segformer_lite --encoder segformer_b0 --pretrained 1
+python -m crackseg.evaluate --config crackseg/config.yaml --weights runs/segformer_lite/best.pth --model segformer_lite --encoder segformer_b0
+python -m crackseg.infer --config crackseg/config.yaml --weights runs/segformer_lite/best.pth --model segformer_lite --input "$DATA_ROOT/test" --save ./outputs/infer
+```
 
-Augmentation Notes
-- Online, OpenCV-only (rotate ±30°, scale 0.8–1.2, brightness/contrast ±20%, Gaussian noise σ≈10/255) on train split only.
-- Intensity/duplication via `AUG_MULTIPLIER` in YAML (e.g., 5).
+More recipes: `COMMANDS.txt`.
 
-Offline Aug Audit (do not use for metrics)
-`python crackseg/tools/offline_augment.py --config crackseg/config.yaml --split train --save ./outputs/offline_aug5_train --seed 42`
-`python crackseg/tools/offline_augment.py --config crackseg/config.yaml --split valid --save ./outputs/offline_aug5_valid --seed 42`
-`python crackseg/tools/offline_augment.py --config crackseg/config.yaml --split test  --save ./outputs/offline_aug5_test  --seed 42`
+## Layout
+
+```
+crackseg/     package (data, models, train/eval/infer)
+runs/         training logs per model
+docs/images/  samples + metric plots
+```

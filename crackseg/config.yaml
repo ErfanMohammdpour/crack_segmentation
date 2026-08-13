@@ -1,4 +1,4 @@
-DATA_ROOT: "C:/Users/thisi/Desktop/ErfanMhp/University4032/CV/project/"
+DATA_ROOT: "./data"  # COCO splits from Roboflow/Ultralytics crack export — see README Dataset
 RUNS_DIR: "./runs"
 OUTPUTS_DIR: "./outputs"
 
