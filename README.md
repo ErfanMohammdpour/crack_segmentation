@@ -9,7 +9,6 @@ Course / applied CV project. Real training logs under `runs/`.
 We **collected / curated** this pavement-crack set ourselves for the course project, then labeled it **manually as COCO polygon segmentation** on Roboflow (not auto-generated masks).
 
 - **Corrected export:** `crack segmentation.v3-version2` (COCO segmentation) — image–mask mismatches fixed.
-- Mask-alignment cleanup credit: **Mr. Seyfouri (آقای صیفوری)**.
 - Layout after unzip: `train/` · `valid/` · `test/` each with `_annotations.coco.json` + images.
 - Loader rule: positive = category name containing `crack` (case-insensitive).
 
